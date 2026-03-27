@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Painting Sketch Overlay</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, sans-serif; background: #111; color: #fff; min-height: 100vh; }
+#app { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+#video { width: 100%; height: 100%; object-fit: cover; display: block; }
+#ref-canvas, #grid-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+#controls { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(20,20,20,0.92); padding: 12px 16px 28px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; backdrop-filter: blur(8px); }
+.ctrl-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 130px; }
+.ctrl-label { font-size: 11px; color: #aaa; }
+.ctrl-row { display: flex; align-items: center; gap: 8px; }
+input[type=range] { flex: 1; accent-color: #7cbfff; height: 4px; }
+.val { font-size: 11px; font-weight: 500; min-width: 30px; color: #fff; }
+button { font-size: 13px; padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer; font-weight: 500; }
+#cam-btn { background: #1a7a3c; color: #fff; }
+#upload-btn { background: #1a4fa8; color: #fff; }
+select { font-size: 12px; padding: 5px 8px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; }
+#placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -60%); text-align: center; color: #888; }
+#placeholder p { font-size: 14px; margin-top: 8px; }
+#placeholder span { font-size: 11px; color: #555; display: block; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="ref-canvas"></canvas>
+  <canvas id="grid-canvas"></canvas>
+  <div id="placeholder">
+    <p>Tap Start Camera to begin</p>
+    <span>Then load a reference photo to overlay on your paper</span>
+  </div>
+</div>
+
+<div id="controls">
+  <div class="ctrl-group" style="flex:0 0 auto">
+    <button id="cam-btn" onclick="startCamera()">Start camera</button>
+  </div>
+  <div class="ctrl-group" style="flex:0 0 auto">
+    <button id="upload-btn" onclick="document.getElementById('file-input').click()">Load reference</button>
+    <input type="file" id="file-input" accept="image/*" style="display:none" onchange="loadRef(event)">
+  </div>
+  <div class="ctrl-group">
+    <div class="ctrl-label">Reference opacity</div>
+    <div class="ctrl-row">
+      <input type="range" id="opacity" min="0" max="100" value="45" step="1" oninput="updateOpacity(this.value)">
+      <span class="val" id="opacity-val">45%</span>
+    </div>
+  </div>
+  <div class="ctrl-group">
+    <div class="ctrl-label">Grid size</div>
+    <div class="ctrl-row">
+      <select id="grid-sel" onchange="drawGrid()">
+        <option value="off">No grid</option>
+        <option value="8x11" selected>8x11</option>
+        <option value="9x12">9x12</option>
+        <option value="11x14">11x14</option>
+        <option value="11x16">11x16</option>
+        <option value="12x16">12x16</option>
+        <option value="16x20">16x20</option>
+      </select>
+    </div>
+  </div>
+  <div class="ctrl-group">
+    <div class="ctrl-label">Horizon line</div>
+    <div class="ctrl-row">
+      <input type="range" id="horizon" min="0" max="100" value="50" step="1" oninput="drawGrid()">
+      <span class="val" id="horizon-val">50%</span>
+    </div>
+  </div>
+</div>
+
+<script>
+let refImg = null, stream = null;
+const video = document.getElementById('video');
+const refCanvas = document.getElementById('ref-canvas');
+const gridCanvas = document.getElementById('grid-canvas');
+const rc = refCanvas.getContext('2d');
+const gc = gridCanvas.getContext('2d');
+
+function getSize() { return { w: window.innerWidth, h: window.innerHeight }; }
+
+function startCamera() {
+  const btn = document.getElementById('cam-btn');
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop()); stream = null;
+    video.srcObject = null; btn.textContent = 'Start camera'; btn.style.background = '#1a7a3c'; return;
+  }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+    .then(s => {
+      stream = s; video.srcObject = s;
+      document.getElementById('placeholder').style.display = 'none';
+      btn.textContent = 'Stop camera'; btn.style.background = '#8a1a1a';
+      setTimeout(() => { syncCanvases(); drawRef(); drawGrid(); }, 600);
+    }).catch(() => alert('Camera access denied. Please allow camera in Safari settings.'));
+}
+
+function syncCanvases() {
+  const { w, h } = getSize();
+  refCanvas.width = gridCanvas.width = w;
+  refCanvas.height = gridCanvas.height = h;
+}
+
+function loadRef(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const img = new Image();
+  img.onload = () => { refImg = img; syncCanvases(); drawRef(); drawGrid(); };
+  img.src = URL.createObjectURL(file);
+}
+
+function updateOpacity(v) { document.getElementById('opacity-val').textContent = v + '%'; drawRef(); }
+
+function drawRef() {
+  syncCanvases(); rc.clearRect(0, 0, refCanvas.width, refCanvas.height);
+  if (!refImg) return;
+  const opacity = parseInt(document.getElementById('opacity').value) / 100;
+  rc.globalAlpha = opacity;
+  const cw = refCanvas.width, ch = refCanvas.height;
+  const scale = Math.min(cw / refImg.width, ch / refImg.height);
+  const dw = refImg.width * scale, dh = refImg.height * scale;
+  rc.drawImage(refImg, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+  rc.globalAlpha = 1;
+}
+
+function drawGrid() {
+  syncCanvases(); gc.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+  const sel = document.getElementById('grid-sel').value;
+  const hPct = parseInt(document.getElementById('horizon').value);
+  document.getElementById('horizon-val').textContent = hPct + '%';
+  const W = gridCanvas.width, H = gridCanvas.height;
+  if (sel !== 'off') {
+    const [cols, rows] = sel.split('x').map(Number);
+    gc.strokeStyle = 'rgba(255,255,100,0.5)'; gc.lineWidth = 0.8;
+    for (let i = 1; i < cols; i++) { const x = Math.round(W / cols * i); gc.beginPath(); gc.moveTo(x, 0); gc.lineTo(x, H); gc.stroke(); }
+    for (let j = 1; j < rows; j++) { const y = Math.round(H / rows * j); gc.beginPath(); gc.moveTo(0, y); gc.lineTo(W, y); gc.stroke(); }
+  }
+  const hy = Math.round(H * hPct / 100);
+  gc.strokeStyle = 'rgba(100,200,255,0.9)'; gc.lineWidth = 2; gc.setLineDash([8, 5]);
+  gc.beginPath(); gc.moveTo(0, hy); gc.lineTo(W, hy); gc.stroke(); gc.setLineDash([]);
+  gc.fillStyle = 'rgba(100,200,255,0.9)'; gc.font = '12px sans-serif'; gc.fillText('horizon', 8, hy - 6);
+}
+
+window.addEventListener('resize', () => { drawRef(); drawGrid(); });
+</script>
+</body>
+</html>
