@@ -11,17 +11,16 @@ body { font-family: -apple-system, sans-serif; background: #111; color: #fff; mi
 #video { width: 100%; height: 100%; object-fit: cover; display: block; }
 #overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 #controls { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(20,20,20,0.92); padding: 12px 16px 28px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; backdrop-filter: blur(8px); }
-.ctrl-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 120px; }
+.ctrl-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 130px; }
 .ctrl-label { font-size: 11px; color: #aaa; }
 .ctrl-row { display: flex; align-items: center; gap: 8px; }
 input[type=range] { flex: 1; accent-color: #7cbfff; }
 .val { font-size: 11px; font-weight: 500; min-width: 30px; color: #fff; }
 button { font-size: 12px; padding: 7px 12px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; cursor: pointer; }
-button.active { background: #1a4fa8; border-color: transparent; }
+button.danger { background: #7a1a1a; border-color: transparent; }
+button.success { background: #1a6b3a; border-color: transparent; }
 select { font-size: 12px; padding: 5px 8px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; }
-.unit-toggle { display: flex; gap: 4px; }
-.unit-btn { padding: 4px 10px; font-size: 11px; }
-#status { font-size: 11px; color: #aaa; width: 100%; padding-top: 4px; }
+#status { font-size: 11px; color: #aaa; width: 100%; padding-top: 2px; }
 #placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -60%); text-align: center; color: #888; }
 #placeholder p { font-size: 14px; margin-top: 8px; }
 #placeholder span { font-size: 11px; color: #555; display: block; margin-top: 4px; }
@@ -33,26 +32,31 @@ select { font-size: 12px; padding: 5px 8px; border-radius: 8px; border: 1px soli
   <canvas id="overlay-canvas"></canvas>
   <div id="placeholder">
     <p>Tap Start Camera to begin</p>
-    <span>Place paper on a dark surface for best detection</span>
+    <span>Place paper on a dark surface, then tap Scan Paper</span>
   </div>
 </div>
 
 <div id="controls">
-  <div class="ctrl-group" style="flex:0 0 auto">
+  <div class="ctrl-group" style="flex:0 0 auto; gap:6px;">
     <button id="cam-btn" onclick="startCamera()">Start camera</button>
+    <button id="scan-btn" onclick="scanOnce()" disabled>Scan paper</button>
   </div>
-  <div class="ctrl-group" style="flex:0 0 auto">
+  <div class="ctrl-group" style="flex:0 0 auto;">
     <button onclick="document.getElementById('file-input').click()">Load reference</button>
     <input type="file" id="file-input" accept="image/*" style="display:none" onchange="loadRef(event)">
   </div>
   <div class="ctrl-group">
     <div class="ctrl-label">Paper size</div>
     <div class="ctrl-row">
-      <select id="paper-sel" onchange="redraw()"></select>
-      <div class="unit-toggle">
-        <button class="unit-btn active" id="btn-cm" onclick="setUnit('cm')">cm</button>
-        <button class="unit-btn" id="btn-in" onclick="setUnit('in')">in</button>
-      </div>
+      <select id="paper-sel" onchange="redraw()">
+        <option value="0">5.5x8.5 in</option>
+        <option value="1">8x11 in</option>
+        <option value="2">9x12 in</option>
+        <option value="3">11x14 in</option>
+        <option value="4">11x16 in</option>
+        <option value="5">12x16 in</option>
+        <option value="6">16x20 in</option>
+      </select>
     </div>
   </div>
   <div class="ctrl-group">
@@ -63,88 +67,95 @@ select { font-size: 12px; padding: 5px 8px; border-radius: 8px; border: 1px soli
         <option value="4" selected>4x4</option>
         <option value="6">6x6</option>
         <option value="8">8x8</option>
-        <option value="10">10x10</option>
       </select>
     </div>
   </div>
   <div class="ctrl-group">
-    <div class="ctrl-label">Reference opacity</div>
+    <div class="ctrl-label">Photo opacity</div>
     <div class="ctrl-row">
       <input type="range" id="opacity" min="0" max="100" value="45" step="1" oninput="redraw()">
       <span class="val" id="opacity-val">45%</span>
     </div>
   </div>
   <div class="ctrl-group">
-    <div class="ctrl-label">Reference line position</div>
+    <div class="ctrl-label">Grid opacity</div>
     <div class="ctrl-row">
-      <input type="range" id="refline" min="0" max="100" value="50" step="1" oninput="redraw()">
-      <span class="val" id="refline-val">50%</span>
+      <input type="range" id="grid-opacity" min="0" max="100" value="70" step="1" oninput="redraw()">
+      <span class="val" id="grid-opacity-val">70%</span>
     </div>
   </div>
   <div id="status">— camera not started —</div>
 </div>
 
 <script>
-const PAPERS_CM = [
-  { label: 'A5 (14.8x21cm)', w: 14.8, h: 21 },
-  { label: 'A4 (21x29.7cm)', w: 21, h: 29.7 },
-  { label: 'A3 (29.7x42cm)', w: 29.7, h: 42 },
-  { label: '20x28cm', w: 20, h: 28 },
-  { label: '28x40cm', w: 28, h: 40 },
-  { label: '30x40cm', w: 30, h: 40 },
-  { label: '40x50cm', w: 40, h: 50 },
-];
-const PAPERS_IN = [
-  { label: '5.5x8.5in', w: 5.5, h: 8.5 },
-  { label: '8x11in', w: 8, h: 11 },
-  { label: '9x12in', w: 9, h: 12 },
-  { label: '11x14in', w: 11, h: 14 },
-  { label: '11x16in', w: 11, h: 16 },
-  { label: '12x16in', w: 12, h: 16 },
-  { label: '16x20in', w: 16, h: 20 },
+const PAPERS = [
+  { w: 5.5, h: 8.5 }, { w: 8, h: 11 }, { w: 9, h: 12 },
+  { w: 11, h: 14 }, { w: 11, h: 16 }, { w: 12, h: 16 }, { w: 16, h: 20 }
 ];
 
-let unit = 'cm', refImg = null, stream = null, detectedCorners = null, detectInterval = null;
+let refImg = null, stream = null, lockedRegion = null, scanning = false;
 const video = document.getElementById('video');
 const canvas = document.getElementById('overlay-canvas');
 const ctx = canvas.getContext('2d');
 
-function setUnit(u) {
-  unit = u;
-  document.getElementById('btn-cm').classList.toggle('active', u === 'cm');
-  document.getElementById('btn-in').classList.toggle('active', u === 'in');
-  populatePapers(); redraw();
-}
-
-function populatePapers() {
-  const papers = unit === 'cm' ? PAPERS_CM : PAPERS_IN;
-  document.getElementById('paper-sel').innerHTML = papers.map((p,i) => '<option value="'+i+'">'+p.label+'</option>').join('');
-}
-
-function getPaper() {
-  const papers = unit === 'cm' ? PAPERS_CM : PAPERS_IN;
-  return papers[parseInt(document.getElementById('paper-sel').value) || 0];
-}
+function getPaper() { return PAPERS[parseInt(document.getElementById('paper-sel').value) || 0]; }
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
 
 function startCamera() {
   const btn = document.getElementById('cam-btn');
   if (stream) {
     stream.getTracks().forEach(t => t.stop()); stream = null;
-    video.srcObject = null; btn.textContent = 'Start camera'; btn.classList.remove('active');
-    clearInterval(detectInterval); detectedCorners = null;
-    setStatus('— camera stopped —'); return;
+    video.srcObject = null;
+    btn.textContent = 'Start camera'; btn.classList.remove('danger');
+    document.getElementById('scan-btn').disabled = true;
+    lockedRegion = null; setStatus('— camera stopped —'); redraw(); return;
   }
   navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
     .then(s => {
       stream = s; video.srcObject = s;
       document.getElementById('placeholder').style.display = 'none';
-      btn.textContent = 'Stop camera'; btn.classList.add('active');
-      video.onloadedmetadata = () => {
-        syncCanvas();
-        detectInterval = setInterval(detectPaper, 500);
-        setStatus('Scanning for paper...');
-      };
+      btn.textContent = 'Stop camera'; btn.classList.add('danger');
+      document.getElementById('scan-btn').disabled = false;
+      video.onloadedmetadata = () => { syncCanvas(); setStatus('Camera ready — tap Scan Paper'); };
     }).catch(() => alert('Camera access denied. Allow camera in Safari settings.'));
+}
+
+function scanOnce() {
+  if (!stream || scanning) return;
+  scanning = true;
+  const btn = document.getElementById('scan-btn');
+  btn.textContent = 'Scanning...'; btn.disabled = true;
+  setStatus('Scanning for paper...');
+  setTimeout(() => {
+    const W = video.videoWidth, H = video.videoHeight;
+    if (!W || !H) { btn.textContent = 'Scan paper'; btn.disabled = false; scanning = false; return; }
+    const off = document.createElement('canvas');
+    off.width = W; off.height = H;
+    const oc = off.getContext('2d');
+    oc.drawImage(video, 0, 0, W, H);
+    const data = oc.getImageData(0, 0, W, H).data;
+    let minX=W, maxX=0, minY=H, maxY=0, count=0;
+    for (let y=0; y<H; y++) for (let x=0; x<W; x++) {
+      const i=(y*W+x)*4;
+      const b=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
+      if (b>160) { if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; count++; }
+    }
+    const coverage = count/(W*H);
+    const cw=canvas.width, ch=canvas.height;
+    if (coverage>0.05 && coverage<0.85 && (maxX-minX)>W*0.2 && (maxY-minY)>H*0.15) {
+      lockedRegion = {
+        x: Math.round((minX/W)*cw), y: Math.round((minY/H)*ch),
+        w: Math.round(((maxX-minX)/W)*cw), h: Math.round(((maxY-minY)/H)*ch)
+      };
+      setStatus('Paper locked — tap Re-scan if you reposition');
+      btn.textContent = 'Re-scan paper'; btn.classList.add('success');
+    } else {
+      setStatus('Could not detect paper — place on dark surface and try again');
+      btn.textContent = 'Scan paper';
+    }
+    btn.disabled = false; scanning = false;
+    redraw();
+  }, 300);
 }
 
 function syncCanvas() {
@@ -159,44 +170,16 @@ function loadRef(e) {
   img.src = URL.createObjectURL(file);
 }
 
-function setStatus(msg) { document.getElementById('status').textContent = msg; }
-
-function detectPaper() {
-  if (!stream) return;
-  const W = video.videoWidth, H = video.videoHeight;
-  if (!W || !H) return;
-  const offscreen = document.createElement('canvas');
-  offscreen.width = W; offscreen.height = H;
-  const oc = offscreen.getContext('2d');
-  oc.drawImage(video, 0, 0, W, H);
-  const data = oc.getImageData(0, 0, W, H).data;
-  const brightness = new Uint8Array(W * H);
-  for (let i = 0; i < W * H; i++) brightness[i] = Math.round(0.299*data[i*4] + 0.587*data[i*4+1] + 0.114*data[i*4+2]);
-  let minX=W, maxX=0, minY=H, maxY=0, count=0;
-  for (let y=0; y<H; y++) for (let x=0; x<W; x++) {
-    if (brightness[y*W+x] > 160) { if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; count++; }
-  }
-  const coverage = count / (W*H);
-  if (coverage>0.05 && coverage<0.85 && (maxX-minX)>W*0.2 && (maxY-minY)>H*0.2) {
-    const cw=canvas.width, ch=canvas.height;
-    detectedCorners = { x:(minX/W)*cw, y:(minY/H)*ch, w:((maxX-minX)/W)*cw, h:((maxY-minY)/H)*ch };
-    setStatus('Paper detected — grid locked');
-  } else {
-    setStatus('Place paper on a dark surface to detect edges');
-  }
-  redraw();
-}
-
 function redraw() {
   syncCanvas();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const opacity = parseInt(document.getElementById('opacity').value) / 100;
-  document.getElementById('opacity-val').textContent = Math.round(opacity*100) + '%';
-  const rPct = parseInt(document.getElementById('refline').value) / 100;
-  document.getElementById('refline-val').textContent = Math.round(rPct*100) + '%';
-  const region = detectedCorners || { x:canvas.width*0.05, y:canvas.height*0.05, w:canvas.width*0.9, h:canvas.height*0.9 };
+  const photoOpacity = parseInt(document.getElementById('opacity').value) / 100;
+  document.getElementById('opacity-val').textContent = Math.round(photoOpacity*100) + '%';
+  const gridOpacity = parseInt(document.getElementById('grid-opacity').value) / 100;
+  document.getElementById('grid-opacity-val').textContent = Math.round(gridOpacity*100) + '%';
+  const region = lockedRegion || { x:canvas.width*0.05, y:canvas.height*0.05, w:canvas.width*0.9, h:canvas.height*0.9 };
   if (refImg) {
-    ctx.globalAlpha = opacity;
+    ctx.globalAlpha = photoOpacity;
     const scale = Math.min(region.w/refImg.width, region.h/refImg.height);
     const dw=refImg.width*scale, dh=refImg.height*scale;
     ctx.drawImage(refImg, region.x+(region.w-dw)/2, region.y+(region.h-dh)/2, dw, dh);
@@ -207,34 +190,32 @@ function redraw() {
     const divisions = parseInt(gridVal);
     const paper = getPaper();
     const cellW = region.w/divisions, cellH = region.h/divisions;
-    ctx.strokeStyle = 'rgba(255,255,100,0.6)'; ctx.lineWidth = 0.8;
-    ctx.font = '10px -apple-system, sans-serif'; ctx.fillStyle = 'rgba(255,255,100,0.95)';
+    ctx.globalAlpha = gridOpacity;
+    ctx.strokeStyle = 'rgba(255,255,80,1)'; ctx.lineWidth = 0.8;
+    ctx.font = 'bold 10px -apple-system, sans-serif'; ctx.fillStyle = 'rgba(255,255,80,1)';
     for (let i=1; i<divisions; i++) {
-      const x = Math.round(region.x+cellW*i);
+      const x=Math.round(region.x+cellW*i);
       ctx.beginPath(); ctx.moveTo(x,region.y); ctx.lineTo(x,region.y+region.h); ctx.stroke();
-      ctx.fillText((paper.w/divisions*i).toFixed(1)+(unit==='cm'?'cm':'"'), x+2, region.y+12);
+      ctx.fillText((paper.w/divisions*i).toFixed(1)+'"', x+2, region.y+13);
     }
     for (let j=1; j<divisions; j++) {
-      const y = Math.round(region.y+cellH*j);
+      const y=Math.round(region.y+cellH*j);
       ctx.beginPath(); ctx.moveTo(region.x,y); ctx.lineTo(region.x+region.w,y); ctx.stroke();
-      ctx.fillText((paper.h/divisions*j).toFixed(1)+(unit==='cm'?'cm':'"'), region.x+3, y-3);
+      ctx.fillText((paper.h/divisions*j).toFixed(1)+'"', region.x+3, y-3);
     }
-    ctx.strokeStyle = 'rgba(255,255,100,0.9)'; ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.5;
     ctx.strokeRect(region.x, region.y, region.w, region.h);
+    ctx.globalAlpha = 1;
   }
-  if (detectedCorners) {
-    ctx.strokeStyle = 'rgba(100,255,150,0.8)'; ctx.lineWidth = 2;
-    ctx.strokeRect(detectedCorners.x, detectedCorners.y, detectedCorners.w, detectedCorners.h);
+  if (lockedRegion) {
+    ctx.globalAlpha = 0.7; ctx.strokeStyle = 'rgba(100,255,150,1)';
+    ctx.lineWidth = 2; ctx.setLineDash([5,4]);
+    ctx.strokeRect(lockedRegion.x, lockedRegion.y, lockedRegion.w, lockedRegion.h);
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
   }
-  const ry = Math.round(region.y + region.h*rPct);
-  ctx.strokeStyle = 'rgba(100,200,255,0.9)'; ctx.lineWidth = 1.5; ctx.setLineDash([6,4]);
-  ctx.beginPath(); ctx.moveTo(region.x,ry); ctx.lineTo(region.x+region.w,ry); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle = 'rgba(100,200,255,0.95)'; ctx.font = '10px -apple-system, sans-serif';
-  ctx.fillText('reference line', region.x+4, ry-4);
 }
 
-populatePapers();
+syncCanvas();
 window.addEventListener('resize', () => { syncCanvas(); redraw(); });
 </script>
 </body>
