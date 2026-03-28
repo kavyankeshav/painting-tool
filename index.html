@@ -10,10 +10,7 @@ body { font-family: -apple-system, sans-serif; background: #111; color: #fff; mi
 #app { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #111; }
 #video { width: 100%; height: 100%; object-fit: cover; display: block; }
 #overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-#toggle-bar { position: absolute; bottom: 0; left: 0; right: 0; display: none; justify-content: center; padding: 12px 12px 28px; background: linear-gradient(transparent, rgba(0,0,0,0.55)); }
-#toggle-btn { font-size: 13px; padding: 7px 28px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.5); color: #fff; cursor: pointer; }
-#controls { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(20,20,20,0.95); padding: 12px 16px 32px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; backdrop-filter: blur(8px); transition: transform 0.3s ease; }
-#controls.hidden { display: none; }
+#controls { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(20,20,20,0.92); padding: 12px 16px 32px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; backdrop-filter: blur(8px); }
 .ctrl-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 130px; }
 .ctrl-label { font-size: 11px; color: #aaa; }
 .ctrl-row { display: flex; align-items: center; gap: 8px; }
@@ -39,9 +36,6 @@ select { font-size: 12px; padding: 5px 8px; border-radius: 8px; border: 1px soli
   <div id="placeholder">
     <p>Tap Start Camera to begin</p>
     <span>Place paper on a dark surface for best tracking</span>
-  </div>
-  <div id="toggle-bar">
-    <button id="toggle-btn" onclick="showControls()">&#8963; adjust</button>
   </div>
 </div>
 
@@ -97,173 +91,150 @@ select { font-size: 12px; padding: 5px 8px; border-radius: 8px; border: 1px soli
 </div>
 
 <script>
-const PAPERS = [
-  { w:5.5, h:8.5 }, { w:8, h:11 }, { w:9, h:12 },
-  { w:11, h:14 }, { w:11, h:16 }, { w:12, h:16 }, { w:16, h:20 }
+const PAPERS=[
+  {w:5.5,h:8.5},{w:8,h:11},{w:9,h:12},
+  {w:11,h:14},{w:11,h:16},{w:12,h:16},{w:16,h:20}
 ];
 
-let refImg=null, stream=null, detectInterval=null;
-let currentRegion=null, lockedRegion=null, isLocked=false;
-const SMOOTHING=0.15;
+let refImg=null,stream=null,detectInterval=null;
+let detectedCorners=null,lockedRegion=null,isLocked=false;
 
 const video=document.getElementById('video');
 const canvas=document.getElementById('overlay-canvas');
 const ctx=canvas.getContext('2d');
 
-function getPaper() { return PAPERS[parseInt(document.getElementById('paper-sel').value)||0]; }
-function setStatus(msg) { document.getElementById('status').textContent=msg; }
+function getPaper(){return PAPERS[parseInt(document.getElementById('paper-sel').value)||0];}
+function setStatus(msg){document.getElementById('status').textContent=msg;}
 
-function startCamera() {
+function startCamera(){
   const btn=document.getElementById('cam-btn');
-  if (stream) {
-    stream.getTracks().forEach(t=>t.stop()); stream=null;
-    video.srcObject=null; clearInterval(detectInterval);
-    btn.textContent='Start camera'; btn.classList.remove('on');
+  if(stream){
+    stream.getTracks().forEach(t=>t.stop());stream=null;
+    video.srcObject=null;clearInterval(detectInterval);
+    btn.textContent='Start camera';btn.classList.remove('on');
     document.getElementById('lock-btn').disabled=true;
-    currentRegion=null; lockedRegion=null; isLocked=false;
-    updateLockBtn(); showControls();
-    setStatus('— camera stopped —'); redraw(); return;
+    detectedCorners=null;lockedRegion=null;isLocked=false;
+    updateLockBtn();setStatus('— camera stopped —');redraw();return;
   }
-  navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ideal:1280}, height:{ideal:720} }, audio:false })
-    .then(s => {
-      stream=s; video.srcObject=s;
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false})
+    .then(s=>{
+      stream=s;video.srcObject=s;
       document.getElementById('placeholder').style.display='none';
-      btn.textContent='Stop camera'; btn.classList.add('on');
+      btn.textContent='Stop camera';btn.classList.add('on');
       document.getElementById('lock-btn').disabled=false;
-      video.onloadedmetadata=()=>{ syncCanvas(); detectInterval=setInterval(detect,200); setStatus('Scanning — adjust position then tap Lock'); };
+      video.onloadedmetadata=()=>{
+        syncCanvas();
+        detectInterval=setInterval(detectPaper,500);
+        setStatus('Scanning for paper...');
+      };
     }).catch(()=>alert('Camera access denied. Allow camera in Safari settings.'));
 }
 
-function toggleLock() {
-  if (!currentRegion) return;
+function toggleLock(){
+  if(!detectedCorners)return;
   isLocked=!isLocked;
-  if (isLocked) {
-    lockedRegion={...currentRegion};
-    setStatus('Locked');
-    hideControls();
+  if(isLocked){
+    lockedRegion={...detectedCorners};
+    setStatus('Position locked — tap Unlock to re-scan');
   } else {
     lockedRegion=null;
-    setStatus('Scanning — adjust position then tap Lock');
-    showControls();
+    setStatus('Scanning for paper...');
   }
-  updateLockBtn(); redraw();
+  updateLockBtn();redraw();
 }
 
-function hideControls() {
-  document.getElementById('controls').classList.add('hidden');
-  document.getElementById('toggle-bar').style.display='flex';
-}
-
-function showControls() {
-  document.getElementById('controls').classList.remove('hidden');
-  document.getElementById('toggle-bar').style.display='none';
-}
-
-function updateLockBtn() {
+function updateLockBtn(){
   const btn=document.getElementById('lock-btn');
-  if (isLocked) { btn.textContent='Unlock'; btn.classList.add('locked'); }
-  else { btn.textContent='Lock position'; btn.classList.remove('locked'); }
+  if(isLocked){btn.textContent='Unlock';btn.classList.add('locked');}
+  else{btn.textContent='Lock position';btn.classList.remove('locked');}
 }
 
-function syncCanvas() {
+function syncCanvas(){
   canvas.width=canvas.offsetWidth;
   canvas.height=canvas.offsetHeight;
 }
 
-function detect() {
-  if (!stream||isLocked) return;
-  const W=video.videoWidth, H=video.videoHeight;
-  if (!W||!H) return;
+function detectPaper(){
+  if(!stream||isLocked)return;
+  const W=video.videoWidth,H=video.videoHeight;
+  if(!W||!H)return;
   const off=document.createElement('canvas');
-  off.width=Math.round(W/2); off.height=Math.round(H/2);
+  off.width=W;off.height=H;
   const oc=off.getContext('2d');
-  oc.drawImage(video,0,0,off.width,off.height);
-  const data=oc.getImageData(0,0,off.width,off.height).data;
-  const OW=off.width, OH=off.height;
-  let minX=OW,maxX=0,minY=OH,maxY=0,count=0;
-  for (let y=0;y<OH;y++) for (let x=0;x<OW;x++) {
-    const i=(y*OW+x)*4;
+  oc.drawImage(video,0,0,W,H);
+  const data=oc.getImageData(0,0,W,H).data;
+  let minX=W,maxX=0,minY=H,maxY=0,count=0;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const i=(y*W+x)*4;
     const b=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
-    if (b>155) { if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; count++; }
+    if(b>160){if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;count++;}
   }
-  const coverage=count/(OW*OH);
-  if (coverage>0.05&&coverage<0.88&&(maxX-minX)>OW*0.15&&(maxY-minY)>OH*0.12) {
-    const cw=canvas.width, ch=canvas.height;
-    const nx=(minX/OW)*cw, ny=(minY/OH)*ch;
-    const nw=((maxX-minX)/OW)*cw, nh=((maxY-minY)/OH)*ch;
-    if (!currentRegion) {
-      currentRegion={x:nx,y:ny,w:nw,h:nh};
-    } else {
-      const T=cw*0.04;
-      if (Math.abs(nx-currentRegion.x)<T&&Math.abs(ny-currentRegion.y)<T&&Math.abs(nw-currentRegion.w)<T&&Math.abs(nh-currentRegion.h)<T) {
-        currentRegion.x+=(nx-currentRegion.x)*SMOOTHING;
-        currentRegion.y+=(ny-currentRegion.y)*SMOOTHING;
-        currentRegion.w+=(nw-currentRegion.w)*SMOOTHING;
-        currentRegion.h+=(nh-currentRegion.h)*SMOOTHING;
-      }
-    }
-    setStatus('Paper found — tap Lock when yellow box fits perfectly');
+  const coverage=count/(W*H);
+  const cw=canvas.width,ch=canvas.height;
+  if(coverage>0.05&&coverage<0.85&&(maxX-minX)>W*0.2&&(maxY-minY)>H*0.2){
+    detectedCorners={
+      x:(minX/W)*cw,y:(minY/H)*ch,
+      w:((maxX-minX)/W)*cw,h:((maxY-minY)/H)*ch
+    };
+    setStatus('Paper detected — tap Lock when it fits perfectly');
   } else {
     setStatus('Place paper on a dark surface — scanning...');
   }
   redraw();
 }
 
-function loadRef(e) {
-  const file=e.target.files[0]; if(!file) return;
+function loadRef(e){
+  const file=e.target.files[0];if(!file)return;
   const img=new Image();
-  img.onload=()=>{ refImg=img; redraw(); };
+  img.onload=()=>{refImg=img;redraw();};
   img.src=URL.createObjectURL(file);
 }
 
-function redraw() {
+function redraw(){
   syncCanvas();
   ctx.clearRect(0,0,canvas.width,canvas.height);
   const photoOpacity=parseInt(document.getElementById('opacity').value)/100;
   document.getElementById('opacity-val').textContent=Math.round(photoOpacity*100)+'%';
   const gridOpacity=parseInt(document.getElementById('grid-opacity').value)/100;
   document.getElementById('grid-opacity-val').textContent=Math.round(gridOpacity*100)+'%';
-  const region=lockedRegion||currentRegion;
-  if (!region) return;
-  if (refImg) {
+  const region=lockedRegion||detectedCorners||{x:canvas.width*0.05,y:canvas.height*0.05,w:canvas.width*0.9,h:canvas.height*0.9};
+  if(refImg){
     ctx.globalAlpha=photoOpacity;
     const scale=Math.min(region.w/refImg.width,region.h/refImg.height);
-    const dw=refImg.width*scale, dh=refImg.height*scale;
+    const dw=refImg.width*scale,dh=refImg.height*scale;
     ctx.drawImage(refImg,region.x+(region.w-dw)/2,region.y+(region.h-dh)/2,dw,dh);
     ctx.globalAlpha=1;
   }
   const gridVal=document.getElementById('grid-sel').value;
-  if (gridVal!=='off') {
+  if(gridVal!=='off'){
     const divisions=parseInt(gridVal);
     const paper=getPaper();
-    const cellW=region.w/divisions, cellH=region.h/divisions;
+    const cellW=region.w/divisions,cellH=region.h/divisions;
     ctx.globalAlpha=gridOpacity;
-    ctx.strokeStyle='rgba(255,255,80,1)'; ctx.lineWidth=0.8;
-    ctx.font='bold 10px -apple-system, sans-serif'; ctx.fillStyle='rgba(255,255,80,1)';
-    for (let i=1;i<divisions;i++) {
+    ctx.strokeStyle='rgba(255,255,80,1)';ctx.lineWidth=0.8;
+    ctx.font='bold 10px -apple-system,sans-serif';ctx.fillStyle='rgba(255,255,80,1)';
+    for(let i=1;i<divisions;i++){
       const x=Math.round(region.x+cellW*i);
-      ctx.beginPath(); ctx.moveTo(x,region.y); ctx.lineTo(x,region.y+region.h); ctx.stroke();
+      ctx.beginPath();ctx.moveTo(x,region.y);ctx.lineTo(x,region.y+region.h);ctx.stroke();
       ctx.fillText((paper.w/divisions*i).toFixed(1)+'"',x+2,region.y+13);
     }
-    for (let j=1;j<divisions;j++) {
+    for(let j=1;j<divisions;j++){
       const y=Math.round(region.y+cellH*j);
-      ctx.beginPath(); ctx.moveTo(region.x,y); ctx.lineTo(region.x+region.w,y); ctx.stroke();
+      ctx.beginPath();ctx.moveTo(region.x,y);ctx.lineTo(region.x+region.w,y);ctx.stroke();
       ctx.fillText((paper.h/divisions*j).toFixed(1)+'"',region.x+3,y-3);
     }
     ctx.lineWidth=1.5;
     ctx.strokeRect(region.x,region.y,region.w,region.h);
     ctx.globalAlpha=1;
   }
-  if (!isLocked) {
-    ctx.strokeStyle='rgba(255,200,50,0.9)';
-    ctx.lineWidth=2; ctx.setLineDash([5,4]);
-    ctx.strokeRect(region.x,region.y,region.w,region.h);
-    ctx.setLineDash([]);
-  }
+  ctx.strokeStyle=isLocked?'rgba(100,255,150,0.9)':'rgba(255,200,50,0.9)';
+  ctx.lineWidth=2;ctx.setLineDash([5,4]);
+  ctx.strokeRect(region.x,region.y,region.w,region.h);
+  ctx.setLineDash([]);
 }
 
 syncCanvas();
-window.addEventListener('resize',()=>{ syncCanvas(); redraw(); });
+window.addEventListener('resize',()=>{syncCanvas();redraw();});
 </script>
 </body>
 </html>
