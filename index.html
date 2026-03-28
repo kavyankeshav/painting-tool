@@ -10,7 +10,9 @@ body { font-family: -apple-system, sans-serif; background: #111; color: #fff; mi
 #app { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #111; }
 #video { width: 100%; height: 100%; object-fit: cover; display: block; }
 #overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-#controls { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(20,20,20,0.92); padding: 12px 16px 32px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; backdrop-filter: blur(8px); }
+#peek-bar { position: absolute; bottom: 0; left: 0; right: 0; display: none; justify-content: center; align-items: center; padding: 10px 10px 32px; background: linear-gradient(transparent, rgba(0,0,0,0.6)); }
+#peek-btn { font-size: 13px; padding: 7px 28px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.35); background: rgba(0,0,0,0.55); color: #fff; cursor: pointer; }
+#controls { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(20,20,20,0.95); padding: 12px 16px 32px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; backdrop-filter: blur(8px); }
 .ctrl-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 130px; }
 .ctrl-label { font-size: 11px; color: #aaa; }
 .ctrl-row { display: flex; align-items: center; gap: 8px; }
@@ -36,6 +38,9 @@ select { font-size: 12px; padding: 5px 8px; border-radius: 8px; border: 1px soli
   <div id="placeholder">
     <p>Tap Start Camera to begin</p>
     <span>Place paper on a dark surface for best tracking</span>
+  </div>
+  <div id="peek-bar">
+    <button id="peek-btn" onclick="showControls()">&#8963; adjust</button>
   </div>
 </div>
 
@@ -106,6 +111,15 @@ const ctx=canvas.getContext('2d');
 function getPaper(){return PAPERS[parseInt(document.getElementById('paper-sel').value)||0];}
 function setStatus(msg){document.getElementById('status').textContent=msg;}
 
+function hideControls(){
+  document.getElementById('controls').style.display='none';
+  document.getElementById('peek-bar').style.display='flex';
+}
+function showControls(){
+  document.getElementById('controls').style.display='flex';
+  document.getElementById('peek-bar').style.display='none';
+}
+
 function startCamera(){
   const btn=document.getElementById('cam-btn');
   if(stream){
@@ -114,7 +128,7 @@ function startCamera(){
     btn.textContent='Start camera';btn.classList.remove('on');
     document.getElementById('lock-btn').disabled=true;
     detectedCorners=null;lockedRegion=null;isLocked=false;
-    updateLockBtn();setStatus('— camera stopped —');redraw();return;
+    updateLockBtn();showControls();setStatus('— camera stopped —');redraw();return;
   }
   navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false})
     .then(s=>{
@@ -135,10 +149,12 @@ function toggleLock(){
   isLocked=!isLocked;
   if(isLocked){
     lockedRegion={...detectedCorners};
-    setStatus('Position locked — tap Unlock to re-scan');
+    setStatus('Locked');
+    hideControls();
   } else {
     lockedRegion=null;
     setStatus('Scanning for paper...');
+    showControls();
   }
   updateLockBtn();redraw();
 }
