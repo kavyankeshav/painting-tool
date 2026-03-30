@@ -26,7 +26,7 @@ button:active { transform: scale(0.97); }
 #lock-btn.locked { background: #1a6b3a; }
 select { font-size: 12px; padding: 5px 8px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; }
 #status { font-size: 11px; color: #aaa; width: 100%; padding-top: 2px; }
-#debug { font-size: 10px; color: #666; width: 100%; font-family: monospace; }
+#debug { font-size: 10px; color: #555; width: 100%; font-family: monospace; }
 #placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -60%); text-align: center; color: #888; }
 #placeholder p { font-size: 14px; margin-top: 8px; }
 #placeholder span { font-size: 11px; color: #555; display: block; margin-top: 4px; }
@@ -117,10 +117,12 @@ function setDebug(msg){document.getElementById('debug').textContent=msg;}
 function hideControls(){
   document.getElementById('controls').style.display='none';
   document.getElementById('peek-bar').style.display='flex';
+  setTimeout(()=>{syncCanvas();redraw();},50);
 }
 function showControls(){
   document.getElementById('controls').style.display='flex';
   document.getElementById('peek-bar').style.display='none';
+  setTimeout(()=>{syncCanvas();redraw();},50);
 }
 
 function startCamera(){
@@ -151,7 +153,7 @@ function toggleLock(){
   if(!detectedCorners)return;
   isLocked=!isLocked;
   if(isLocked){
-    lockedRegion={...detectedCorners};
+    lockedRegion={fx:detectedCorners.fx,fy:detectedCorners.fy,fw:detectedCorners.fw,fh:detectedCorners.fh};
     setStatus('Position locked — tap Unlock to re-scan');
     hideControls();
   } else {
@@ -173,11 +175,14 @@ function syncCanvas(){
   canvas.height=canvas.offsetHeight;
 }
 
+function fracToCanvas(f){
+  return {x:f.fx*canvas.width,y:f.fy*canvas.height,w:f.fw*canvas.width,h:f.fh*canvas.height};
+}
+
 function detectPaper(){
   if(!stream||isLocked)return;
   const W=video.videoWidth,H=video.videoHeight;
   if(!W||!H)return;
-
   const scale=0.25;
   const SW=Math.round(W*scale),SH=Math.round(H*scale);
   const off=document.createElement('canvas');
@@ -185,37 +190,22 @@ function detectPaper(){
   const oc=off.getContext('2d');
   oc.drawImage(video,0,0,SW,SH);
   const data=oc.getImageData(0,0,SW,SH).data;
-
   let maxB=0;
   for(let i=0;i<SW*SH;i++){
     const b=0.299*data[i*4]+0.587*data[i*4+1]+0.114*data[i*4+2];
     if(b>maxB)maxB=b;
   }
-
   const threshold=maxB*0.75;
-
   let minX=SW,maxX=0,minY=SH,maxY=0,count=0;
   for(let y=0;y<SH;y++)for(let x=0;x<SW;x++){
     const i=(y*SW+x)*4;
     const b=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
-    if(b>threshold){
-      if(x<minX)minX=x;if(x>maxX)maxX=x;
-      if(y<minY)minY=y;if(y>maxY)maxY=y;
-      count++;
-    }
+    if(b>threshold){if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;count++;}
   }
-
   const coverage=count/(SW*SH);
-  setDebug('max:'+Math.round(maxB)+' thresh:'+Math.round(threshold)+' coverage:'+( coverage*100).toFixed(1)+'%');
-
-  const cw=canvas.width,ch=canvas.height;
-  const scaleX=cw/SW,scaleY=ch/SH;
-
+  setDebug('max:'+Math.round(maxB)+' thresh:'+Math.round(threshold)+' cov:'+(coverage*100).toFixed(1)+'%');
   if(coverage>0.04&&coverage<0.88&&(maxX-minX)>SW*0.15&&(maxY-minY)>SH*0.12){
-    detectedCorners={
-      x:minX*scaleX,y:minY*scaleY,
-      w:(maxX-minX)*scaleX,h:(maxY-minY)*scaleY
-    };
+    detectedCorners={fx:minX/SW,fy:minY/SH,fw:(maxX-minX)/SW,fh:(maxY-minY)/SH};
     setStatus('Paper detected — tap Lock when yellow box fits your page');
   } else {
     detectedCorners=null;
@@ -238,10 +228,9 @@ function redraw(){
   document.getElementById('opacity-val').textContent=Math.round(photoOpacity*100)+'%';
   const gridOpacity=parseInt(document.getElementById('grid-opacity').value)/100;
   document.getElementById('grid-opacity-val').textContent=Math.round(gridOpacity*100)+'%';
-
-  const region=lockedRegion||detectedCorners;
-  if(!region)return;
-
+  const src=lockedRegion||detectedCorners;
+  if(!src)return;
+  const region=fracToCanvas(src);
   if(refImg){
     ctx.globalAlpha=photoOpacity;
     const scale=Math.min(region.w/refImg.width,region.h/refImg.height);
@@ -249,7 +238,6 @@ function redraw(){
     ctx.drawImage(refImg,region.x+(region.w-dw)/2,region.y+(region.h-dh)/2,dw,dh);
     ctx.globalAlpha=1;
   }
-
   const gridVal=document.getElementById('grid-sel').value;
   if(gridVal!=='off'){
     const divisions=parseInt(gridVal);
@@ -272,7 +260,6 @@ function redraw(){
     ctx.strokeRect(region.x,region.y,region.w,region.h);
     ctx.globalAlpha=1;
   }
-
   ctx.strokeStyle=isLocked?'rgba(100,255,150,0.9)':'rgba(255,200,50,0.9)';
   ctx.lineWidth=2;ctx.setLineDash([5,4]);
   ctx.strokeRect(region.x,region.y,region.w,region.h);
