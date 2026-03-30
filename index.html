@@ -10,23 +10,28 @@ body { font-family: -apple-system, sans-serif; background: #111; color: #fff; mi
 #app { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #111; }
 #video { width: 100%; height: 100%; object-fit: cover; display: block; }
 #overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-#peek-bar { position: absolute; bottom: 0; left: 0; right: 0; display: none; justify-content: center; align-items: center; padding: 10px 10px 32px; background: linear-gradient(transparent, rgba(0,0,0,0.6)); }
-#peek-btn { font-size: 13px; padding: 7px 28px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.35); background: rgba(0,0,0,0.55); color: #fff; cursor: pointer; }
-#controls { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(20,20,20,0.95); padding: 12px 16px 32px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; backdrop-filter: blur(8px); }
-.ctrl-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 130px; }
-.ctrl-label { font-size: 11px; color: #aaa; }
-.ctrl-row { display: flex; align-items: center; gap: 8px; }
-input[type=range] { flex: 1; accent-color: #7cbfff; }
-.val { font-size: 11px; font-weight: 500; min-width: 30px; color: #fff; }
-button { font-size: 12px; padding: 7px 14px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; cursor: pointer; }
-button:active { transform: scale(0.97); }
-#cam-btn { background: #1a6b3a; border-color: transparent; font-weight: 500; }
-#cam-btn.on { background: #7a1a1a; }
-#lock-btn { background: #7a5c00; border-color: transparent; font-weight: 500; }
-#lock-btn.locked { background: #1a6b3a; }
-select { font-size: 12px; padding: 5px 8px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; }
-#status { font-size: 11px; color: #aaa; width: 100%; padding-top: 2px; }
-#debug { font-size: 10px; color: #555; width: 100%; font-family: monospace; }
+#peek-bar { position: absolute; bottom: 0; left: 0; right: 0; display: none; justify-content: center; align-items: center; padding: 10px 10px 32px; background: linear-gradient(transparent, rgba(0,0,0,0.5)); }
+#peek-btn { font-size: 18px; width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.5); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+#controls { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(20,20,20,0.95); padding: 10px 12px 32px; display: flex; flex-direction: column; gap: 8px; backdrop-filter: blur(8px); }
+.btn-row { display: flex; gap: 6px; align-items: center; }
+.btn-row button { flex: 1; font-size: 11px; font-weight: 500; padding: 8px 6px; border-radius: 10px; border: none; cursor: pointer; letter-spacing: 0.2px; }
+.btn-row button:active { opacity: 0.7; }
+#cam-btn { background: #1c1c1e; color: #30d158; }
+#cam-btn.on { color: #ff453a; }
+#lock-btn { background: #1c1c1e; color: #ffd60a; }
+#lock-btn.locked { color: #30d158; }
+#ref-btn { background: #1c1c1e; color: #0a84ff; }
+#collapse-btn { background: #1c1c1e; color: #aaa; font-size: 16px; flex: 0 0 36px; border-radius: 10px; }
+.sel-row { display: flex; gap: 6px; }
+.sel-wrap { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.sel-label { font-size: 10px; color: #888; letter-spacing: 0.3px; text-transform: uppercase; }
+.sel-wrap select { width: 100%; font-size: 12px; padding: 7px 8px; border-radius: 10px; border: none; background: #1c1c1e; color: #fff; appearance: none; -webkit-appearance: none; }
+.slider-row { display: flex; gap: 12px; }
+.slider-wrap { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.slider-label { font-size: 10px; color: #888; letter-spacing: 0.3px; text-transform: uppercase; display: flex; justify-content: space-between; }
+input[type=range] { width: 100%; accent-color: #0a84ff; height: 3px; }
+#status { font-size: 11px; color: #777; }
+#debug { font-size: 10px; color: #444; font-family: monospace; }
 #placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -60%); text-align: center; color: #888; }
 #placeholder p { font-size: 14px; margin-top: 8px; }
 #placeholder span { font-size: 11px; color: #555; display: block; margin-top: 4px; }
@@ -41,56 +46,49 @@ select { font-size: 12px; padding: 5px 8px; border-radius: 8px; border: 1px soli
     <span>Place paper on a dark surface for best tracking</span>
   </div>
   <div id="peek-bar">
-    <button id="peek-btn" onclick="showControls()">&#8963; adjust</button>
+    <button id="peek-btn" onclick="showControls()">↑</button>
   </div>
 </div>
 
 <div id="controls">
-  <div class="ctrl-group" style="flex:0 0 auto; gap:6px;">
+  <div class="btn-row">
     <button id="cam-btn" onclick="startCamera()">Start camera</button>
-    <button id="lock-btn" onclick="toggleLock()" disabled>Lock position</button>
-  </div>
-  <div class="ctrl-group" style="flex:0 0 auto;">
-    <button onclick="document.getElementById('file-input').click()">Load reference</button>
+    <button id="lock-btn" onclick="toggleLock()" disabled>Lock</button>
+    <button id="ref-btn" onclick="document.getElementById('file-input').click()">Load reference</button>
     <input type="file" id="file-input" accept="image/*" style="display:none" onchange="loadRef(event)">
+    <button id="collapse-btn" onclick="collapseControls()">↓</button>
   </div>
-  <div class="ctrl-group">
-    <div class="ctrl-label">Paper size</div>
-    <div class="ctrl-row">
+  <div class="sel-row">
+    <div class="sel-wrap">
+      <div class="sel-label">Size</div>
       <select id="paper-sel" onchange="redraw()">
-        <option value="0">5.5x8.5 in</option>
-        <option value="1">8x11 in</option>
-        <option value="2">9x12 in</option>
-        <option value="3">11x14 in</option>
-        <option value="4">11x16 in</option>
-        <option value="5">12x16 in</option>
-        <option value="6">16x20 in</option>
+        <option value="0">5.5x8.5"</option>
+        <option value="1">8x11"</option>
+        <option value="2">9x12"</option>
+        <option value="3">11x14"</option>
+        <option value="4">11x16"</option>
+        <option value="5">12x16"</option>
+        <option value="6">16x20"</option>
       </select>
     </div>
-  </div>
-  <div class="ctrl-group">
-    <div class="ctrl-label">Grid divisions</div>
-    <div class="ctrl-row">
+    <div class="sel-wrap">
+      <div class="sel-label">Grid</div>
       <select id="grid-sel" onchange="redraw()">
-        <option value="off">No grid</option>
+        <option value="off">None</option>
         <option value="4" selected>4x4</option>
         <option value="6">6x6</option>
         <option value="8">8x8</option>
       </select>
     </div>
   </div>
-  <div class="ctrl-group">
-    <div class="ctrl-label">Photo opacity</div>
-    <div class="ctrl-row">
+  <div class="slider-row">
+    <div class="slider-wrap">
+      <div class="slider-label"><span>Photo</span><span id="opacity-val">45%</span></div>
       <input type="range" id="opacity" min="0" max="100" value="45" step="1" oninput="redraw()">
-      <span class="val" id="opacity-val">45%</span>
     </div>
-  </div>
-  <div class="ctrl-group">
-    <div class="ctrl-label">Grid opacity</div>
-    <div class="ctrl-row">
+    <div class="slider-wrap">
+      <div class="slider-label"><span>Grid</span><span id="grid-opacity-val">70%</span></div>
       <input type="range" id="grid-opacity" min="0" max="100" value="70" step="1" oninput="redraw()">
-      <span class="val" id="grid-opacity-val">70%</span>
     </div>
   </div>
   <div id="status">— camera not started —</div>
@@ -98,14 +96,8 @@ select { font-size: 12px; padding: 5px 8px; border-radius: 8px; border: 1px soli
 </div>
 
 <script>
-const PAPERS=[
-  {w:5.5,h:8.5},{w:8,h:11},{w:9,h:12},
-  {w:11,h:14},{w:11,h:16},{w:12,h:16},{w:16,h:20}
-];
-
-let refImg=null,stream=null,detectInterval=null;
-let detectedCorners=null,lockedRegion=null,isLocked=false;
-
+const PAPERS=[{w:5.5,h:8.5},{w:8,h:11},{w:9,h:12},{w:11,h:14},{w:11,h:16},{w:12,h:16},{w:16,h:20}];
+let refImg=null,stream=null,detectInterval=null,detectedCorners=null,lockedRegion=null,isLocked=false;
 const video=document.getElementById('video');
 const canvas=document.getElementById('overlay-canvas');
 const ctx=canvas.getContext('2d');
@@ -114,7 +106,7 @@ function getPaper(){return PAPERS[parseInt(document.getElementById('paper-sel').
 function setStatus(msg){document.getElementById('status').textContent=msg;}
 function setDebug(msg){document.getElementById('debug').textContent=msg;}
 
-function hideControls(){
+function collapseControls(){
   document.getElementById('controls').style.display='none';
   document.getElementById('peek-bar').style.display='flex';
   setTimeout(()=>{syncCanvas();redraw();},50);
@@ -128,8 +120,7 @@ function showControls(){
 function startCamera(){
   const btn=document.getElementById('cam-btn');
   if(stream){
-    stream.getTracks().forEach(t=>t.stop());stream=null;
-    video.srcObject=null;clearInterval(detectInterval);
+    stream.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;clearInterval(detectInterval);
     btn.textContent='Start camera';btn.classList.remove('on');
     document.getElementById('lock-btn').disabled=true;
     detectedCorners=null;lockedRegion=null;isLocked=false;
@@ -141,25 +132,18 @@ function startCamera(){
       document.getElementById('placeholder').style.display='none';
       btn.textContent='Stop camera';btn.classList.add('on');
       document.getElementById('lock-btn').disabled=false;
-      video.onloadedmetadata=()=>{
-        syncCanvas();
-        detectInterval=setInterval(detectPaper,600);
-        setStatus('Scanning for paper...');
-      };
+      video.onloadedmetadata=()=>{syncCanvas();detectInterval=setInterval(detectPaper,600);setStatus('Scanning for paper...');};
     }).catch(()=>alert('Camera access denied. Allow camera in Safari settings.'));
 }
 
 function toggleLock(){
-  if(!detectedCorners)return;
+  if(!detectedCorners&&!isLocked)return;
   isLocked=!isLocked;
   if(isLocked){
     lockedRegion={fx:detectedCorners.fx,fy:detectedCorners.fy,fw:detectedCorners.fw,fh:detectedCorners.fh};
-    setStatus('Position locked — tap Unlock to re-scan');
-    hideControls();
+    setStatus('Locked');collapseControls();
   } else {
-    lockedRegion=null;
-    setStatus('Scanning for paper...');
-    showControls();
+    lockedRegion=null;setStatus('Scanning for paper...');showControls();
   }
   updateLockBtn();redraw();
 }
@@ -167,69 +151,48 @@ function toggleLock(){
 function updateLockBtn(){
   const btn=document.getElementById('lock-btn');
   if(isLocked){btn.textContent='Unlock';btn.classList.add('locked');}
-  else{btn.textContent='Lock position';btn.classList.remove('locked');}
+  else{btn.textContent='Lock';btn.classList.remove('locked');}
 }
 
-function syncCanvas(){
-  canvas.width=canvas.offsetWidth;
-  canvas.height=canvas.offsetHeight;
-}
-
-function fracToCanvas(f){
-  return {x:f.fx*canvas.width,y:f.fy*canvas.height,w:f.fw*canvas.width,h:f.fh*canvas.height};
-}
+function syncCanvas(){canvas.width=canvas.offsetWidth;canvas.height=canvas.offsetHeight;}
+function fracToCanvas(f){return{x:f.fx*canvas.width,y:f.fy*canvas.height,w:f.fw*canvas.width,h:f.fh*canvas.height};}
 
 function detectPaper(){
   if(!stream||isLocked)return;
-  const W=video.videoWidth,H=video.videoHeight;
-  if(!W||!H)return;
-  const scale=0.25;
-  const SW=Math.round(W*scale),SH=Math.round(H*scale);
-  const off=document.createElement('canvas');
-  off.width=SW;off.height=SH;
-  const oc=off.getContext('2d');
-  oc.drawImage(video,0,0,SW,SH);
+  const W=video.videoWidth,H=video.videoHeight;if(!W||!H)return;
+  const scale=0.25,SW=Math.round(W*scale),SH=Math.round(H*scale);
+  const off=document.createElement('canvas');off.width=SW;off.height=SH;
+  const oc=off.getContext('2d');oc.drawImage(video,0,0,SW,SH);
   const data=oc.getImageData(0,0,SW,SH).data;
   let maxB=0;
-  for(let i=0;i<SW*SH;i++){
-    const b=0.299*data[i*4]+0.587*data[i*4+1]+0.114*data[i*4+2];
-    if(b>maxB)maxB=b;
-  }
+  for(let i=0;i<SW*SH;i++){const b=0.299*data[i*4]+0.587*data[i*4+1]+0.114*data[i*4+2];if(b>maxB)maxB=b;}
   const threshold=maxB*0.75;
   let minX=SW,maxX=0,minY=SH,maxY=0,count=0;
   for(let y=0;y<SH;y++)for(let x=0;x<SW;x++){
-    const i=(y*SW+x)*4;
-    const b=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
+    const i=(y*SW+x)*4,b=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
     if(b>threshold){if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;count++;}
   }
   const coverage=count/(SW*SH);
   setDebug('max:'+Math.round(maxB)+' thresh:'+Math.round(threshold)+' cov:'+(coverage*100).toFixed(1)+'%');
   if(coverage>0.04&&coverage<0.88&&(maxX-minX)>SW*0.15&&(maxY-minY)>SH*0.12){
     detectedCorners={fx:minX/SW,fy:minY/SH,fw:(maxX-minX)/SW,fh:(maxY-minY)/SH};
-    setStatus('Paper detected — tap Lock when yellow box fits your page');
-  } else {
-    detectedCorners=null;
-    setStatus('No page found — place paper on a dark surface');
-  }
+    setStatus('Paper detected — tap Lock when yellow box fits');
+  } else {detectedCorners=null;setStatus('Place paper on dark surface — scanning...');}
   redraw();
 }
 
 function loadRef(e){
   const file=e.target.files[0];if(!file)return;
-  const img=new Image();
-  img.onload=()=>{refImg=img;redraw();};
-  img.src=URL.createObjectURL(file);
+  const img=new Image();img.onload=()=>{refImg=img;redraw();};img.src=URL.createObjectURL(file);
 }
 
 function redraw(){
-  syncCanvas();
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  syncCanvas();ctx.clearRect(0,0,canvas.width,canvas.height);
   const photoOpacity=parseInt(document.getElementById('opacity').value)/100;
   document.getElementById('opacity-val').textContent=Math.round(photoOpacity*100)+'%';
   const gridOpacity=parseInt(document.getElementById('grid-opacity').value)/100;
   document.getElementById('grid-opacity-val').textContent=Math.round(gridOpacity*100)+'%';
-  const src=lockedRegion||detectedCorners;
-  if(!src)return;
+  const src=lockedRegion||detectedCorners;if(!src)return;
   const region=fracToCanvas(src);
   if(refImg){
     ctx.globalAlpha=photoOpacity;
@@ -240,11 +203,9 @@ function redraw(){
   }
   const gridVal=document.getElementById('grid-sel').value;
   if(gridVal!=='off'){
-    const divisions=parseInt(gridVal);
-    const paper=getPaper();
+    const divisions=parseInt(gridVal),paper=getPaper();
     const cellW=region.w/divisions,cellH=region.h/divisions;
-    ctx.globalAlpha=gridOpacity;
-    ctx.strokeStyle='rgba(255,255,80,1)';ctx.lineWidth=0.8;
+    ctx.globalAlpha=gridOpacity;ctx.strokeStyle='rgba(255,255,80,1)';ctx.lineWidth=0.8;
     ctx.font='bold 10px -apple-system,sans-serif';ctx.fillStyle='rgba(255,255,80,1)';
     for(let i=1;i<divisions;i++){
       const x=Math.round(region.x+cellW*i);
@@ -256,14 +217,10 @@ function redraw(){
       ctx.beginPath();ctx.moveTo(region.x,y);ctx.lineTo(region.x+region.w,y);ctx.stroke();
       ctx.fillText((paper.h/divisions*j).toFixed(1)+'"',region.x+3,y-3);
     }
-    ctx.lineWidth=1.5;
-    ctx.strokeRect(region.x,region.y,region.w,region.h);
-    ctx.globalAlpha=1;
+    ctx.lineWidth=1.5;ctx.strokeRect(region.x,region.y,region.w,region.h);ctx.globalAlpha=1;
   }
   ctx.strokeStyle=isLocked?'rgba(100,255,150,0.9)':'rgba(255,200,50,0.9)';
-  ctx.lineWidth=2;ctx.setLineDash([5,4]);
-  ctx.strokeRect(region.x,region.y,region.w,region.h);
-  ctx.setLineDash([]);
+  ctx.lineWidth=2;ctx.setLineDash([5,4]);ctx.strokeRect(region.x,region.y,region.w,region.h);ctx.setLineDash([]);
 }
 
 syncCanvas();
